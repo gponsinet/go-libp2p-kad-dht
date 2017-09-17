@@ -252,10 +252,11 @@ func (ms *messageSender) SendMessage(ctx context.Context, pmes *pb.Message) erro
 
 		log.Event(ctx, "dhtSentMessage", ms.dht.self, ms.p, pmes)
 
-		if ms.singleMes > streamReuseTries {
-			ms.resetHard()
-		} else if retry {
+		if retry {
 			ms.singleMes++
+			if ms.singleMes > streamReuseTries {
+				ms.resetHard()
+			}
 		}
 
 		return nil
@@ -352,10 +353,9 @@ func (ms *messageSender) SendRequest(ctx context.Context, pmes *pb.Message) (*pb
 
 		if retry {
 			ms.lk.Lock()
+			ms.singleMes++
 			if ms.singleMes > streamReuseTries {
 				ms.resetSoft(rcount)
-			} else {
-				ms.singleMes++
 			}
 			ms.lk.Unlock()
 		}
