@@ -224,6 +224,7 @@ func (ms *messageSender) prep() error {
 const streamReuseTries = 3
 
 func (ms *messageSender) SendMessage(ctx context.Context, pmes *pb.Message) error {
+	defer log.EventBegin(ctx, "dhtSendMessage", ms.dht.self, ms.p, pmes).Done()
 	ms.lk.Lock()
 	defer ms.lk.Unlock()
 	retry := false
@@ -249,8 +250,6 @@ func (ms *messageSender) SendMessage(ctx context.Context, pmes *pb.Message) erro
 				continue
 			}
 		}
-
-		log.Event(ctx, "dhtSentMessage", ms.dht.self, ms.p, pmes)
 
 		if retry {
 			ms.singleMes++
@@ -292,8 +291,6 @@ func (ms *messageSender) SendRequest(ctx context.Context, pmes *pb.Message) (*pb
 				continue
 			}
 		}
-
-		log.Event(ctx, "dhtSentMessage", ms.dht.self, ms.p, pmes)
 
 		resch := make(chan requestResult, 1)
 		select {
