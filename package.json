@@ -159,6 +159,12 @@
       "hash": "QmSvhbgtjQJKdT5avEeb7cvjYs7YrhebJyM1K6GAnkKgfd",
       "name": "go-libp2p-swarm",
       "version": "3.0.2"
+    },
+    {
+      "author": "hsanjuan",
+      "hash": "QmRJVNatYJwTAHgdSM1Xef9QVQ1Ch3XHdmcrykjP5Y4soL",
+      "name": "go-ipfs-delay",
+      "version": "0.0.1"
     }
   ],
   "gxVersion": "0.4.0",
