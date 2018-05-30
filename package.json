@@ -66,6 +66,12 @@
     },
     {
       "author": "whyrusleeping",
+      "hash": "QmYP96pJMo5Hzc3UfsBaarQX1RimsaL5gzb1DT1tC2DJRB",
+      "name": "autobatch",
+      "version": "0.2.10"
+    },
+    {
+      "author": "whyrusleeping",
       "hash": "QmPdxCaVp4jZ9RbxqZADvKH6kiCR5jHvdR5f2ycjAY6T2a",
       "name": "go-testutil",
       "version": "1.2.3"
