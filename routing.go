@@ -158,6 +158,9 @@ func (dht *IpfsDHT) SearchValue(ctx context.Context, key string, opts ...ropts.O
 	go func() {
 		defer close(out)
 
+		if responsesNeeded < 0 {
+			responsesNeeded = 0
+		}
 		vals := make([]RecvdVal, 0, responsesNeeded)
 		best := -1
 
@@ -272,7 +275,7 @@ func (dht *IpfsDHT) getValues(ctx context.Context, key string, nvals int) (<-cha
 			From: dht.self,
 		}
 
-		if nvals <= 1 {
+		if nvals == 0 || nvals == 1 {
 			return done(nil)
 		}
 
