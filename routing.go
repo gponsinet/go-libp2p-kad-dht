@@ -108,7 +108,6 @@ func (dht *IpfsDHT) PutValue(ctx context.Context, key string, value []byte, opts
 type RecvdVal struct {
 	Val  []byte
 	From peer.ID
-	Err  error
 }
 
 // GetValue searches for the value corresponding to given Key.
@@ -122,30 +121,14 @@ func (dht *IpfsDHT) GetValue(ctx context.Context, key string, opts ...ropts.Opti
 		eip.Done()
 	}()
 
-	responses, errCh := dht.SearchValue(ctx, key, opts...)
+	responses, err := dht.SearchValue(ctx, key, opts...)
+	if err != nil {
+		return nil, err
+	}
 	var best []byte
 
-	for {
-		select {
-		case r, ok := <-responses:
-			if !ok {
-				responses = nil
-				break
-			}
-
-			best = r
-		case err, ok := <-errCh:
-			if !ok {
-				errCh = nil
-				break
-			}
-
-			return nil, err
-		}
-
-		if errCh == nil && responses == nil {
-			break
-		}
+	for r := range responses {
+		best = r
 	}
 
 	if best == nil {
@@ -155,10 +138,10 @@ func (dht *IpfsDHT) GetValue(ctx context.Context, key string, opts ...ropts.Opti
 	return best, nil
 }
 
-func (dht *IpfsDHT) SearchValue(ctx context.Context, key string, opts ...ropts.Option) (<-chan []byte, <-chan error) {
+func (dht *IpfsDHT) SearchValue(ctx context.Context, key string, opts ...ropts.Option) (<-chan []byte, error) {
 	var cfg ropts.Options
 	if err := cfg.Apply(opts...); err != nil {
-		return nil, wrapErr(err)
+		return nil, err
 	}
 
 	responsesNeeded := 0
@@ -166,13 +149,15 @@ func (dht *IpfsDHT) SearchValue(ctx context.Context, key string, opts ...ropts.O
 		responsesNeeded = getQuorum(&cfg)
 	}
 
-	out := make(chan []byte, responsesNeeded)
-	outErr := make(chan error, 1)
+	valCh, err := dht.getValues(ctx, key, responsesNeeded)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(chan []byte)
 	go func() {
 		defer close(out)
-		defer close(outErr)
 
-		valCh := dht.GetValues(ctx, key, responsesNeeded)
 		vals := make([]RecvdVal, 0, responsesNeeded)
 		best := -1
 
@@ -207,14 +192,6 @@ func (dht *IpfsDHT) SearchValue(ctx context.Context, key string, opts ...ropts.O
 			select {
 			case v, ok := <-valCh:
 				if !ok {
-					// failed to find a good record
-					if best < 0 {
-						outErr <- routing.ErrNotFound
-					}
-					return
-				}
-				if v.Err != nil {
-					outErr <- v.Err
 					return
 				}
 
@@ -241,32 +218,29 @@ func (dht *IpfsDHT) SearchValue(ctx context.Context, key string, opts ...ropts.O
 					}
 				}
 			case <-ctx.Done():
-				outErr <- ctx.Err()
 				return
 			}
 		}
 	}()
 
-	return out, outErr
+	return out, nil
 }
 
 // GetValues gets nvals values corresponding to the given key.
-func (dht *IpfsDHT) GetValues(ctx context.Context, key string, nvals int) <-chan RecvdVal {
+func (dht *IpfsDHT) getValues(ctx context.Context, key string, nvals int) (<-chan RecvdVal, error) {
 	eip := log.EventBegin(ctx, "GetValues")
 
-	// alloc 1 to have for sync errors
 	vals := make(chan RecvdVal, 1)
 
-	done := func(err error) <-chan RecvdVal {
+	done := func(err error) (<-chan RecvdVal, error) {
 		defer close(vals)
 
 		eip.Append(loggableKey(key))
 		if err != nil {
 			eip.SetError(err)
-			vals <- RecvdVal{Err: err}
 		}
 		eip.Done()
-		return vals
+		return vals, err
 	}
 
 	// If we have it local, don't bother doing an RPC!
@@ -373,7 +347,7 @@ func (dht *IpfsDHT) GetValues(ctx context.Context, key string, nvals int) <-chan
 		done(err)
 	}()
 
-	return vals
+	return vals, nil
 }
 
 // Provider abstraction for indirect stores.
@@ -694,13 +668,4 @@ func (dht *IpfsDHT) FindPeersConnectedToPeer(ctx context.Context, id peer.ID) (<
 	}()
 
 	return peerchan, nil
-}
-
-func wrapErr(err error) <-chan error {
-	ch := make(chan error, 1)
-	if err != nil {
-		ch <- err
-	}
-	close(ch)
-	return ch
 }
