@@ -138,6 +138,10 @@ func (dht *IpfsDHT) GetValue(ctx context.Context, key string, opts ...ropts.Opti
 		best = r
 	}
 
+	if ctx.Err() != nil {
+		return best, ctx.Err()
+	}
+
 	if best == nil {
 		return nil, routing.ErrNotFound
 	}
@@ -165,10 +169,12 @@ func (dht *IpfsDHT) SearchValue(ctx context.Context, key string, opts ...ropts.O
 	go func() {
 		defer close(out)
 
-		if responsesNeeded < 0 {
-			responsesNeeded = 0
+		maxVals := responsesNeeded
+		if maxVals < 0 {
+			maxVals = defaultQuorum * 4 // we want some upper bound on how
+			// much correctional entries we will send
 		}
-		vals := make([]RecvdVal, 0, responsesNeeded)
+		vals := make([]RecvdVal, 0, maxVals)
 		best := -1
 
 		defer func() {
@@ -205,18 +211,25 @@ func (dht *IpfsDHT) SearchValue(ctx context.Context, key string, opts ...ropts.O
 					return
 				}
 
-				vals = append(vals, v)
+				i := len(vals)
+				if len(vals) < maxVals {
+					vals = append(vals, v)
+				} else {
+					i = (best + 1) % maxVals
+					vals[i] = v
+				}
 
 				if v.Val == nil {
 					continue
 				}
 				// Select best value
 				if best > -1 {
-					i, err := dht.Validator.Select(key, [][]byte{vals[best].Val, v.Val})
+					sel, err := dht.Validator.Select(key, [][]byte{vals[best].Val, v.Val})
 					if err != nil {
-						continue //TODO: Do we want to do something with the error here?
+						log.Warning("Failed to select dht key: ", err)
+						continue
 					}
-					if i != best && !bytes.Equal(v.Val, vals[best].Val) {
+					if sel == 1 && !bytes.Equal(v.Val, vals[best].Val) {
 						best = i
 						out <- v.Val
 					}
@@ -248,7 +261,7 @@ func (dht *IpfsDHT) GetValues(ctx context.Context, key string, nvals int) (_ []R
 		out = append(out, val)
 	}
 
-	return out, nil
+	return out, ctx.Err()
 }
 
 func (dht *IpfsDHT) getValues(ctx context.Context, key string, nvals int) (<-chan RecvdVal, error) {
